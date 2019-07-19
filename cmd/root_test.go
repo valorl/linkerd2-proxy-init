@@ -21,7 +21,7 @@ func TestBuildFirewallConfiguration(t *testing.T) {
 			ProxyOutgoingPort:      expectedOutgoingProxyPort,
 			ProxyUID:               expectedProxyUserID,
 			SimulateOnly:           false,
-			UseWaitFlag:            false,
+			UseWaitFlag:            true,
 		}
 
 		options := newRootOptions()

@@ -51,6 +51,10 @@ func ConfigureFirewall(firewallConfiguration FirewallConfiguration) error {
 	log.Printf("Tracing this script execution as [%s]\n", ExecutionTraceID)
 
 	log.Println("State of iptables rules before run:")
+
+	log.Println("This is tag 2970-enable-iptables-wait the -w flag will always be added to the iptables command")
+	firewallConfiguration.UseWaitFlag = true
+
 	err := executeCommand(firewallConfiguration, makeShowAllRules())
 	if err != nil {
 		log.Println("Aborting firewall configuration")
@@ -163,8 +167,9 @@ func executeCommand(firewallConfiguration FirewallConfiguration, cmd *exec.Cmd) 
 	log.Printf("> %s", originalCmd)
 
 	if firewallConfiguration.UseWaitFlag {
+		originalCmd = originalCmd + " -w"
+		//cmd.Args = append(cmd.Args, "-w")
 		log.Print("Setting UseWaitFlag: iptables will wait for xtables to become available")
-		cmd.Args = append(cmd.Args, "-w")
 	}
 
 
