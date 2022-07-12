@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"os/exec"
 
 	log "github.com/sirupsen/logrus"
@@ -14,6 +15,8 @@ import (
 
 // RootOptions provides the information that will be used to build a firewall configuration.
 type RootOptions struct {
+	IPv4                  bool
+	IPv6                  bool
 	IncomingProxyPort     int
 	OutgoingProxyPort     int
 	ProxyUserID           int
@@ -57,7 +60,6 @@ func NewRootCmd() *cobra.Command {
 		Short: "proxy-init adds a Kubernetes pod to the Linkerd service mesh",
 		Long:  "proxy-init adds a Kubernetes pod to the Linkerd service mesh.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-
 			if options.TimeoutCloseWaitSecs != 0 {
 				sysctl := exec.Command("sysctl", "-w",
 					fmt.Sprintf("net.netfilter.nf_conntrack_tcp_timeout_close_wait=%d", options.TimeoutCloseWaitSecs),
@@ -80,7 +82,27 @@ func NewRootCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return iptables.ConfigureFirewall(*config)
+
+			ipv4, ipv6, err := detectIPFamilies()
+			if err != nil {
+				return err
+			}
+
+			if ipv4 {
+				err = iptables.IPv4().ConfigureFirewall(*config)
+				if err != nil {
+					return err
+				}
+			}
+
+			if ipv6 {
+				err = iptables.IPv6().ConfigureFirewall(*config)
+				if err != nil {
+					return err
+				}
+			}
+
+			return nil
 		},
 	}
 
@@ -137,6 +159,41 @@ func BuildFirewallConfiguration(options *RootOptions) (*iptables.FirewallConfigu
 	}
 
 	return firewallConfiguration, nil
+}
+
+func detectIPFamilies() (ipv4 bool, ipv6 bool, err error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false, false, err
+	}
+
+	var ips []netip.Addr
+
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && !ipnet.IP.IsLinkLocalUnicast() && !ipnet.IP.IsLinkLocalMulticast() {
+			addr, _ := netip.AddrFromSlice(ipnet.IP)
+			ips = append(ips, addr)
+		}
+	}
+
+	if len(ips) < 1 {
+		return false, false, fmt.Errorf("no valid local IP address found")
+	}
+
+	ipv4, ipv6 = false, false
+	for _, ip := range ips {
+		ip := ip.Unmap()
+		if !ipv4 && ip.Is4() {
+			ipv4 = true
+			continue
+		}
+		if !ipv6 && ip.Is6() {
+			ipv6 = true
+			continue
+		}
+	}
+
+	return ipv4, ipv6, nil
 }
 
 func getFormatter(format string) log.Formatter {
