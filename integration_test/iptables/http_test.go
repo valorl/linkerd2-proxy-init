@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -70,7 +71,6 @@ func TestPodRedirectsAllPorts(t *testing.T) {
 		expectSuccessfulGetRequestTo(t, podRedirectsAllPortsIP, "8088")
 		expectSuccessfulGetRequestTo(t, podRedirectsAllPortsIP, "8888")
 		expectSuccessfulGetRequestTo(t, podRedirectsAllPortsIP, "8988")
-
 	})
 
 	t.Run("succeeds connecting to pod via a service through container's exposed port", func(t *testing.T) {
@@ -167,14 +167,17 @@ func TestPodMakesOutboundConnection(t *testing.T) {
 		}
 	})
 
-	t.Run("connecting to loopback from non-proxy container does not get redirected to proxy", func(t *testing.T) {
-		response := makeCallFromContainerToAnother(t, proxyPodIP, ignoredContainerPort, "127.0.0.1", notTheProxyContainerPort)
+	for _, addr := range getLoopbackAddrs(t) {
+		name := fmt.Sprintf("connecting to loopback (%s) from non-proxy container does not get redirected to proxy", addr)
+		t.Run(name, func(t *testing.T) {
+			response := makeCallFromContainerToAnother(t, proxyPodIP, ignoredContainerPort, addr, notTheProxyContainerPort)
 
-		expectedDownstreamResponse := fmt.Sprintf("me:[%s:%s]downstream:[%s:%s]", proxyPodName, ignoredContainerPort, proxyPodName, notTheProxyContainerPort)
-		if !strings.Contains(response, expectedDownstreamResponse) {
-			t.Fatalf("Expected response not to be redirected to the proxy, expected %s but it was %s", expectedDownstreamResponse, response)
-		}
-	})
+			expectedDownstreamResponse := fmt.Sprintf("me:[%s:%s]downstream:[%s:%s]", proxyPodName, ignoredContainerPort, proxyPodName, notTheProxyContainerPort)
+			if !strings.Contains(response, expectedDownstreamResponse) {
+				t.Fatalf("Expected response not to be redirected to the proxy, expected %s but it was %s", expectedDownstreamResponse, response)
+			}
+		})
+	}
 }
 
 func TestPodWithSomeSubnetsIgnored(t *testing.T) {
@@ -204,7 +207,7 @@ func TestPodWithSomeSubnetsIgnored(t *testing.T) {
 func makeCallFromContainerToAnother(t *testing.T, fromPodNamed string, fromContainerAtPort string, podIWantToReachName string, containerPortIWantToReach string) string {
 	downstreamURL := fmt.Sprintf("http://%s:%s", podIWantToReachName, containerPortIWantToReach)
 
-	//Make request asking target to make a back-end request
+	// Make request asking target to make a back-end request
 	targetURL := fmt.Sprintf("http://%s:%s/call?url=%s", fromPodNamed, fromContainerAtPort, url.QueryEscape(downstreamURL))
 	return expectSuccessfulGetRequestToURL(t, targetURL)
 }
@@ -237,4 +240,24 @@ func expectSuccessfulGetRequestToURL(t *testing.T, url string) string {
 	response := string(body)
 	fmt.Printf("Response from %s: %s", url, response)
 	return response
+}
+
+func getLoopbackAddrs(t *testing.T) []string {
+	netAddrs, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatalf("failed to get interface addrs: %v", err)
+	}
+
+	var addrs []string
+
+	for _, a := range netAddrs {
+		if ipnet, ok := a.(*net.IPNet); ok && ipnet.IP.IsLoopback() {
+			addrs = append(addrs, ipnet.IP.String())
+		}
+	}
+
+	if len(addrs) < 1 {
+		t.Fatal("did not find any loopback address")
+	}
+	return addrs
 }
