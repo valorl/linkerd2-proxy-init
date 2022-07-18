@@ -7,6 +7,7 @@ on:
     - '**/*.md'
     branches:
     - master
+    - feat/ip6tables
 jobs:
   kind_integration_tests:
     name: KinD integration tests
@@ -26,3 +27,23 @@ jobs:
       run: make kind-load
     - name: Run integration tests
       run: SKIP_BUILD_TESTER_IMAGE=1 make integration-test
+
+  kind_integration_tests_ipv6:
+    name: KinD integration tests (IPv6)
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b
+    - name: Setup KinD
+      uses: engineerd/setup-kind@aa272fe2a7309878ffc2a81c56cfe3ef108ae7d0
+      with:
+        version: v0.11.1
+        config: integration_test/kind-ipv6.yaml
+    - name: Docker build
+      run: |
+        make image
+        make tester-image
+    - name: Load image into the local KinD cluster
+      run: make kind-load
+    - name: Run integration tests
+      run: SKIP_BUILD_TESTER_IMAGE=1 make integration-test IPV6=true
