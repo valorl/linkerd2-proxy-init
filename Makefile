@@ -36,7 +36,7 @@ fmt: ## Check the code formatting
 
 .PHONY: integration-test
 integration-test: image ## Perform integration test
-	cd integration_test && ./run_tests.sh
+	cd integration_test && ./run_tests.sh $(IPV6)
 
 ###############
 # Docker

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+IPV6="$1"
+
 # define some colors to use for output
 WHITE=$(tput setaf 7)
 NORMAL=$(tput sgr0)
@@ -30,6 +32,11 @@ function log(){
 
 TESTER_JOB_NAME=iptables-tester
 LAB_YAML_FILE=iptables/iptablestest-lab.yaml
+
+if [[ "$IPV6" == "true" ]]; then
+    LAB_YAML_FILE=iptables/iptablestest-lab-ipv6.yaml
+fi
+
 
 header 'Deleting any existing objects from previous test runs...'
 kubectl delete -f "$LAB_YAML_FILE"
